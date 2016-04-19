@@ -257,8 +257,10 @@ def action_edit():
         f.write(yml.replace('\n- ', '\n\n- '))
         f.seek(0)
         subprocess.check_call(cmd + ' ' + temp_path, shell=True)
-        yml = f.read()
         f.truncate()
+        f.close
+    with codecs.open(temp_path, 'r', 'utf-8') as f:
+        yml = f.read()
         f.close
 
     os.close(fd)
