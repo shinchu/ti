@@ -445,7 +445,7 @@ def main():
 
 
 store = JsonStore(os.getenv('SHEET_FILE', None) or
-                    os.path.expanduser('~/Dropbox/Sync/Todo/ti-sheet'))
+                    os.path.expanduser('~/.ti-sheet'))
 
 if __name__ == '__main__':
     use_color = True
