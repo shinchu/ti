@@ -86,7 +86,6 @@ def blue(str):
     else:
         return str
 
-
 def action_on(name, time):
     data = store.load()
     work = data['work']
@@ -229,7 +228,6 @@ def action_log(period):
 
     name_col_len = 0
     for name, item in log.items():
-        name_col_len = max(name_col_len, len(name))
         secs = 0
         secs = item['delta'].seconds
         tmsg = []
@@ -249,13 +247,19 @@ def action_log(period):
 
         log[name]['tmsg'] = ', '.join(tmsg)[::-1].replace(',', ' &'[::-1], 1)[::-1]
 
+        name_col_len = max(name_col_len, len(item['tmsg']))
+
     log[name]['tmsg_total'] = ', '.join(tmsg_total)[::-1].replace(',', ' &'[::-1], 1)[::-1]
 
+    name_col_len = max(name_col_len, len(item['tmsg_total']))
+
     name = _not_found = object()
-    print('Total', ' ∙∙ ', item['tmsg_total'])
+    working = red(' ← working\n')
+    print(item['tmsg_total'].ljust(name_col_len), ' | ', 'Total')
+    print('-' * name_col_len * 2)
     for name, item in sorted(log.items(), key=(lambda x: x[1]), reverse=True):
-        print(name.ljust(name_col_len), ' ∙∙ ', item['tmsg'],
-                end=' ← working\n' if current == name else '\n')
+        print(item['tmsg'].ljust(name_col_len), ' | ', name,
+                end = working  if current == name else '\n')
 
     if name is _not_found:
         print('No entries found',
