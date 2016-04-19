@@ -11,7 +11,7 @@ Usage:
   ti (s|status)
   ti (t|tag) <tag>...
   ti (n|note) <note-text>...
-  ti (l|log) [today]
+  ti (l|log) [all]
   ti (e|edit)
   ti (i|interrupt)
   ti --no-color
@@ -189,7 +189,7 @@ def action_status():
     current = data['work'][-1]
 
     start_time = parse_isotime(current['start'])
-    diff = timegap(start_time, datetime.utcnow())
+    diff = timegap(start_time, datetime.now())
 
     print('You have been working on {0} for {1}.'
             .format(green(current['name']), diff))
@@ -206,7 +206,7 @@ def action_log(period):
             if 'end' in item:
                 log[item['name']]['delta'] += parse_isotime(item['end']) - start_time
             else:
-                log[item['name']]['delta'] += datetime.utcnow() - start_time
+                log[item['name']]['delta'] += datetime.now() - start_time
                 current = item['name']
 
     name_col_len = 0
@@ -296,7 +296,7 @@ def to_datetime(timestr):
 
 def parse_engtime(timestr):
 
-    now = datetime.utcnow()
+    now = datetime.now()
     if not timestr or timestr.strip() == 'now':
         return now
 
@@ -392,7 +392,7 @@ def parse_args(argv=sys.argv):
 
     elif head in ['o', 'on']:
         if not tail:
-            helpful_exit('Need the name of whatever you are working on.')
+            helpful_exit('Need the name of what you are working on.')
 
         fn = action_on
         args = {
@@ -410,7 +410,7 @@ def parse_args(argv=sys.argv):
 
     elif head in ['l', 'log']:
         fn = action_log
-        args = {'period': to_datetime(' '.join(tail)) if tail else None}
+        args = {'period': to_datetime(' '.join([u'today'])) if not tail else None}
 
     elif head in ['t', 'tag']:
         if not tail:
@@ -428,7 +428,7 @@ def parse_args(argv=sys.argv):
 
     elif head in ['i', 'interrupt']:
         if not tail:
-            helpful_exit('Need the name of whatever you are working on.')
+            helpful_exit('Need the name of what you are working on.')
 
         fn = action_interrupt
         args = {
