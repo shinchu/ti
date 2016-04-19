@@ -31,7 +31,8 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import json, yaml
-from datetime import datetime, timedelta
+import codecs
+from datetime import datetime, timedelta, date
 from collections import defaultdict
 import re
 import os, subprocess, tempfile
@@ -48,7 +49,7 @@ class JsonStore(object):
     def load(self):
 
         if path.exists(self.filename):
-            with open(self.filename) as f:
+            with codecs.open(self.filename, 'r', 'utf-8') as f:
                 data = json.load(f)
 
         else:
@@ -57,8 +58,8 @@ class JsonStore(object):
         return data
 
     def dump(self, data):
-        with open(self.filename, 'w') as f:
-            json.dump(data, f, separators=(',', ': '), indent=2)
+        with codecs.open(self.filename, 'w', 'utf-8') as f:
+            json.dump(data, f, separators=(',', ': '), indent=2, ensure_ascii=False)
 
 
 def red(str):
@@ -70,17 +71,17 @@ def red(str):
 def green(str):
     if use_color:
         return Fore.GREEN + str + Fore.RESET
-    else: 
+    else:
         return str
 
 def yellow(str):
-    if use_color: 
+    if use_color:
         return Fore.YELLOW + str + Fore.RESET
     else:
         return str
 
 def blue(str):
-    if use_color: 
+    if use_color:
         return Fore.BLUE + str + Fore.RESET
     else:
         return str
@@ -200,12 +201,13 @@ def action_log(period):
     current = None
 
     for item in work:
-        start_time = parse_isotime(item['start'])
-        if 'end' in item:
-            log[item['name']]['delta'] += parse_isotime(item['end']) - start_time
-        else:
-            log[item['name']]['delta'] += datetime.utcnow() - start_time
-            current = item['name']
+        if period == None or parse_isotime(item['start']) > parse_isotime(period):
+            start_time = parse_isotime(item['start'])
+            if 'end' in item:
+                log[item['name']]['delta'] += parse_isotime(item['end']) - start_time
+            else:
+                log[item['name']]['delta'] += datetime.utcnow() - start_time
+                current = item['name']
 
     name_col_len = 0
 
@@ -230,9 +232,14 @@ def action_log(period):
 
         log[name]['tmsg'] = ', '.join(tmsg)[::-1].replace(',', ' &'[::-1], 1)[::-1]
 
+    name = _not_found = object()
     for name, item in sorted(log.items(), key=(lambda x: x[1]), reverse=True):
         print(name.ljust(name_col_len), ' ∙∙ ', item['tmsg'],
                 end=' ← working\n' if current == name else '\n')
+
+    if name is _not_found:
+        print('No entries found',
+            end=' after time ' + period + '\n' if period != None else '\n')
 
 
 def action_edit():
@@ -242,10 +249,11 @@ def action_edit():
 
     data = store.load()
     yml = yaml.safe_dump(data, default_flow_style=False, allow_unicode=True)
+    yml = yml.decode('utf-8')
 
     cmd = os.getenv('EDITOR')
     fd, temp_path = tempfile.mkstemp(prefix='ti.')
-    with open(temp_path, "r+") as f:
+    with codecs.open(temp_path, 'r+', 'utf-8') as f:
         f.write(yml.replace('\n- ', '\n\n- '))
         f.seek(0)
         subprocess.check_call(cmd + ' ' + temp_path, shell=True)
@@ -307,6 +315,16 @@ def parse_engtime(timestr):
         hours = 1 if n in ['a', 'an'] else int(n)
         return now - timedelta(hours=hours)
 
+    match = re.match(r'(\d+|a) \s* (days?) \s+ ago $', timestr, re.X)
+    if match is not None:
+        n = match.group(1)
+        days = 1 if n == 'a' else int(n)
+        return now - timedelta(days=days)
+
+    if timestr == 'today':
+        return parse_isotime(str(date.today()) + 'T00:00:00.1Z')
+
+
     raise ValueError("Don't understand the time '" + timestr + "'")
 
 
@@ -361,7 +379,7 @@ def parse_args(argv=sys.argv):
 
     head = argv[1]
     tail = argv[2:]
-      
+
     if head in ['-h', '--help', 'h', 'help']:
         helpful_exit()
 
@@ -389,7 +407,7 @@ def parse_args(argv=sys.argv):
 
     elif head in ['l', 'log']:
         fn = action_log
-        args = {'period': tail[0] if tail else None}
+        args = {'period': to_datetime(' '.join(tail)) if tail else None}
 
     elif head in ['t', 'tag']:
         if not tail:
@@ -427,7 +445,7 @@ def main():
 
 
 store = JsonStore(os.getenv('SHEET_FILE', None) or
-                    os.path.expanduser('~/.ti-sheet'))
+                    os.path.expanduser('~/Dropbox/Sync/Todo/ti-sheet'))
 
 if __name__ == '__main__':
     use_color = True
