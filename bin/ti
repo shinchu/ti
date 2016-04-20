@@ -11,9 +11,10 @@ Usage:
   ti (s|status)
   ti (t|tag) <tag>...
   ti (n|note) <note-text>...
-  ti (l|log) [all]
+  ti (l|log) [a|all|y|yesterday|%Y-%M-%D]
   ti (e|edit)
   ti (i|interrupt)
+  ti (d|display)
   ti --no-color
   ti -h | --help
 
@@ -86,13 +87,14 @@ def blue(str):
     else:
         return str
 
+
 def action_on(name, time):
     data = store.load()
     work = data['work']
 
     if work and 'end' not in work[-1]:
         print('You are already working on ' + yellow(work[-1]['name']) +
-                '. Stop it before going on.', file=sys.stderr)
+                '. Stop it before moving on.', file=sys.stderr)
         raise SystemExit(1)
 
     entry = {
@@ -104,7 +106,6 @@ def action_on(name, time):
     store.dump(data)
 
     print('Start working on ' + green(name) + '.')
-
 
 def action_fin(time, back_from_interrupt=True):
     ensure_working()
@@ -126,7 +127,7 @@ def action_fin(time, back_from_interrupt=True):
             print('Congrats, you\'re out of interrupts!')
 
 
-def action_interrupt(time):
+def action_interrupt(name, time):
     ensure_working()
 
     action_fin(time, back_from_interrupt=False)
@@ -141,7 +142,7 @@ def action_interrupt(time):
     interrupt_stack.append(interrupted)
     store.dump(data)
 
-    action_on('interrupt: ' + green(interrupted['name']), time)
+    action_on('interrupt: ' + green(name), time)
     print('You are now %d deep in interrupts.' % len(interrupt_stack))
 
 
@@ -158,7 +159,7 @@ def action_note(content):
 
     store.dump(data)
 
-    print('Yep, noted to ' + yellow(current['name']) + '.')
+    print('Noted to ' + yellow(current['name']) + '.')
 
 
 def action_tag(tags):
@@ -174,7 +175,7 @@ def action_tag(tags):
     store.dump(data)
 
     tag_count = str(len(tags))
-    print('Okay, tagged current work with ' + tag_count + ' tag' +
+    print('Tagged current work with ' + tag_count + ' tag' +
             ('s' if tag_count > 1 else '') + '.')
 
 
@@ -208,27 +209,13 @@ def action_log(period):
                 log[item['name']]['delta'] += datetime.now() - start_time
                 current = item['name']
 
+    name_col_len = 0
     secs_total = 0
     tmsg_total = []
+
     for name, item in log.items():
         secs_total += item['delta'].seconds
 
-    if secs_total > 3600:
-        hours = int(secs_total / 3600)
-        secs_total -= hours * 3600
-        tmsg_total.append(str(hours) + ' hour' + ('s' if hours > 1 else ''))
-
-    if secs_total > 60:
-        mins = int(secs_total / 60)
-        secs_total -= mins * 60
-        tmsg_total.append(str(mins) + ' minute' + ('s' if mins > 1 else ''))
-
-    if secs_total:
-        tmsg_total.append(str(secs_total) + ' second' + ('s' if secs_total > 1 else ''))
-
-    name_col_len = 0
-    for name, item in log.items():
-        secs = 0
         secs = item['delta'].seconds
         tmsg = []
 
@@ -246,24 +233,35 @@ def action_log(period):
             tmsg.append(str(secs) + ' second' + ('s' if secs > 1 else ''))
 
         log[name]['tmsg'] = ', '.join(tmsg)[::-1].replace(',', ' &'[::-1], 1)[::-1]
+        name_col_len = max(name_col_len, len(log[name]['tmsg']))
 
-        name_col_len = max(name_col_len, len(item['tmsg']))
+    if secs_total > 3600:
+        hours = int(secs_total / 3600)
+        secs_total -= hours * 3600
+        tmsg_total.append(str(hours) + ' hour' + ('s' if hours > 1 else ''))
 
-    log[name]['tmsg_total'] = ', '.join(tmsg_total)[::-1].replace(',', ' &'[::-1], 1)[::-1]
+    if secs_total > 60:
+        mins = int(secs_total / 60)
+        secs_total -= mins * 60
+        tmsg_total.append(str(mins) + ' minute' + ('s' if mins > 1 else ''))
 
-    name_col_len = max(name_col_len, len(item['tmsg_total']))
+    if secs_total:
+        tmsg_total.append(str(secs_total) + ' second' + ('s' if secs_total > 1 else ''))
 
+    tmsg_total = ', '.join(tmsg_total)[::-1].replace(',', ' &'[::-1], 1)[::-1]
+    name_col_len = max(name_col_len, len(tmsg_total))
+
+    print(tmsg_total.ljust(name_col_len) , ' | ', 'Total')
+    print('-' * name_col_len * 2)
     name = _not_found = object()
     working = red(' ← working\n')
-    print(item['tmsg_total'].ljust(name_col_len), ' | ', 'Total')
-    print('-' * name_col_len * 2)
     for name, item in sorted(log.items(), key=(lambda x: x[1]), reverse=True):
         print(item['tmsg'].ljust(name_col_len), ' | ', name,
-                end = working  if current == name else '\n')
+              end = working if current == name else '\n')
 
     if name is _not_found:
         print('No entries found',
-            end=' after time ' + period + '\n' if period != None else '\n')
+              end=' after time ' + period + '\n' if period != None else '\n')
 
 
 def action_edit():
@@ -351,6 +349,12 @@ def parse_engtime(timestr):
     if timestr == 'today':
         return parse_isotime(str(date.today()) + 'T00:00:00.1Z')
 
+    if timestr == 'yesterday':
+        return parse_isotime(str(date.today() - timedelta(days = 1)) + 'T00:00:00.1Z')
+
+    match = re.match(r'[0-9]{4}\-[0-9]{2}\-[0-9]{2}', timestr, re.X)
+    if match is not None:
+        return parse_isotime(timestr + 'T00:00:00.1Z')
 
     raise ValueError("Don't understand the time '" + timestr + "'")
 
@@ -434,7 +438,14 @@ def parse_args(argv=sys.argv):
 
     elif head in ['l', 'log']:
         fn = action_log
-        args = {'period': to_datetime(' '.join([u'today'])) if not tail else None}
+        if not tail:
+            args = {'period': to_datetime(' '.join([u'today']))}
+        elif tail[0] in ['a', 'all']:
+            args = {'period': None}
+        elif tail[0] in ['y', 'yesterday']:
+            args = {'period': to_datetime(' '.join([u'yesterday']))}
+        else:
+            args = {'period': to_datetime(' '.join(tail))}
 
     elif head in ['t', 'tag']:
         if not tail:
@@ -451,8 +462,12 @@ def parse_args(argv=sys.argv):
         args = {'content': ' '.join(tail)}
 
     elif head in ['i', 'interrupt']:
+        if not tail:
+            helpful_exit('Need the name of what you are working on.')
+
         fn = action_interrupt
         args = {
+            'name': tail[0],
             'time': to_datetime(' '.join(tail[1:])),
         }
 
