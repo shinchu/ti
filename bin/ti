@@ -6,7 +6,7 @@ ti is a simple and extensible time tracker for the command line. Visit the
 project page (http://ti.sharats.me) for more details.
 
 Usage:
-  ti (o|on) <name> [<time>...]
+  ti (o|on) <name> [+<project>] [<time>...]
   ti (f|fin) [<time>...]
   ti (s|status)
   ti (t|tag) <tag>...
@@ -14,7 +14,6 @@ Usage:
   ti (l|log) [a|all|y|yesterday|%Y-%M-%D]
   ti (e|edit)
   ti (i|interrupt)
-  ti (d|display)
   ti --no-color
   ti -h | --help
 
@@ -106,6 +105,28 @@ def action_on(name, time):
     store.dump(data)
 
     print('Start working on ' + green(name) + '.')
+
+
+def action_on_project(name, time, project):
+    data = store.load()
+    work = data['work']
+
+    if work and 'end' not in work[-1]:
+        print('You are already working on ' + yellow(work[-1]['name']) +
+                '. Stop it before moving on.', file=sys.stderr)
+        raise SystemExit(1)
+
+    entry = {
+        'name': name,
+        'start': time,
+        'project': project,
+    }
+
+    work.append(entry)
+    store.dump(data)
+
+    print('Start working on ' + green(name) + blue('[' + project + ']') + '.')
+
 
 def action_fin(time, back_from_interrupt=True):
     ensure_working()
@@ -422,11 +443,29 @@ def parse_args(argv=sys.argv):
         if not tail:
             helpful_exit('Need the name of what you are working on.')
 
-        fn = action_on
-        args = {
-            'name': tail[0],
-            'time': to_datetime(' '.join(tail[1:])),
-        }
+        if len(tail) == 1:
+
+            fn = action_on
+            args = {
+                'name': tail[0],
+                'time': to_datetime(' '.join(tail[1:])),
+            }
+
+        else:
+
+            if re.match(r'\+.*', tail[1]):
+                fn = action_on_project
+                args = {
+                    'name': tail[0],
+                    'project': tail[1].lstrip('+'),
+                    'time': to_datetime(' '.join(tail[2:])),
+                }
+            else:
+                fn = action_on
+                args = {
+                    'name': tail[0],
+                    'time': to_datetime(' '.join(tail[1:])),
+                }
 
     elif head in ['f', 'fin']:
         fn = action_fin
